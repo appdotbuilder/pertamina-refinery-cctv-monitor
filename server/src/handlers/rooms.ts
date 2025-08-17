@@ -1,3 +1,6 @@
+import { db } from '../db';
+import { roomsTable, buildingsTable } from '../db/schema';
+import { eq } from 'drizzle-orm';
 import { 
   type Room, 
   type CreateRoomInput, 
@@ -5,59 +8,140 @@ import {
 } from '../schema';
 
 export async function getRooms(): Promise<Room[]> {
-  // This is a placeholder implementation!
-  // The goal of this handler is to fetch all rooms across all buildings
-  // TODO: Query all rooms from database with building relationships
-  return Promise.resolve([]);
+  try {
+    const results = await db.select()
+      .from(roomsTable)
+      .execute();
+
+    return results;
+  } catch (error) {
+    console.error('Failed to fetch rooms:', error);
+    throw error;
+  }
 }
 
 export async function getRoomById(id: number): Promise<Room | null> {
-  // This is a placeholder implementation!
-  // The goal of this handler is to fetch a specific room by ID
-  // TODO: Query room by ID from database with building data
-  return Promise.resolve(null);
+  try {
+    const results = await db.select()
+      .from(roomsTable)
+      .where(eq(roomsTable.id, id))
+      .execute();
+
+    return results[0] || null;
+  } catch (error) {
+    console.error('Failed to fetch room by ID:', error);
+    throw error;
+  }
 }
 
 export async function getRoomsByBuildingId(buildingId: number): Promise<Room[]> {
-  // This is a placeholder implementation!
-  // The goal of this handler is to fetch all rooms within a specific building
-  // TODO: Query rooms by building_id from database
-  return Promise.resolve([]);
+  try {
+    const results = await db.select()
+      .from(roomsTable)
+      .where(eq(roomsTable.building_id, buildingId))
+      .execute();
+
+    return results;
+  } catch (error) {
+    console.error('Failed to fetch rooms by building ID:', error);
+    throw error;
+  }
 }
 
 export async function createRoom(input: CreateRoomInput): Promise<Room> {
-  // This is a placeholder implementation!
-  // The goal of this handler is to create a new room within a building
-  // TODO: Insert new room into database, validate building exists
-  return Promise.resolve({
-    id: 1,
-    building_id: input.building_id,
-    name: input.name,
-    floor: input.floor,
-    created_at: new Date(),
-    updated_at: new Date()
-  } as Room);
+  try {
+    // Verify that the building exists
+    const buildingExists = await db.select()
+      .from(buildingsTable)
+      .where(eq(buildingsTable.id, input.building_id))
+      .execute();
+
+    if (buildingExists.length === 0) {
+      throw new Error('Building not found');
+    }
+
+    // Insert new room
+    const result = await db.insert(roomsTable)
+      .values({
+        building_id: input.building_id,
+        name: input.name,
+        floor: input.floor
+      })
+      .returning()
+      .execute();
+
+    return result[0];
+  } catch (error) {
+    console.error('Room creation failed:', error);
+    throw error;
+  }
 }
 
 export async function updateRoom(input: UpdateRoomInput): Promise<Room> {
-  // This is a placeholder implementation!
-  // The goal of this handler is to update room information
-  // TODO: Update room data in database, validate building exists if changed
-  return Promise.resolve({
-    id: input.id,
-    building_id: input.building_id || 1,
-    name: input.name || 'Updated Room',
-    floor: input.floor || 1,
-    created_at: new Date(),
-    updated_at: new Date()
-  } as Room);
+  try {
+    // Check if room exists
+    const existingRoom = await db.select()
+      .from(roomsTable)
+      .where(eq(roomsTable.id, input.id))
+      .execute();
+
+    if (existingRoom.length === 0) {
+      throw new Error('Room not found');
+    }
+
+    // If building_id is being updated, verify the new building exists
+    if (input.building_id !== undefined) {
+      const buildingExists = await db.select()
+        .from(buildingsTable)
+        .where(eq(buildingsTable.id, input.building_id))
+        .execute();
+
+      if (buildingExists.length === 0) {
+        throw new Error('Building not found');
+      }
+    }
+
+    // Update room
+    const result = await db.update(roomsTable)
+      .set({
+        ...(input.building_id !== undefined && { building_id: input.building_id }),
+        ...(input.name !== undefined && { name: input.name }),
+        ...(input.floor !== undefined && { floor: input.floor }),
+        updated_at: new Date()
+      })
+      .where(eq(roomsTable.id, input.id))
+      .returning()
+      .execute();
+
+    return result[0];
+  } catch (error) {
+    console.error('Room update failed:', error);
+    throw error;
+  }
 }
 
 export async function deleteRoom(id: number): Promise<{ message: string }> {
-  // This is a placeholder implementation!
-  // The goal of this handler is to delete a room and cascade delete associated CCTVs
-  // TODO: Delete room from database with cascade operations for CCTVs
-  return Promise.resolve({
-    message: 'Room deleted successfully.'
-  });
+  try {
+    // Check if room exists
+    const existingRoom = await db.select()
+      .from(roomsTable)
+      .where(eq(roomsTable.id, id))
+      .execute();
+
+    if (existingRoom.length === 0) {
+      throw new Error('Room not found');
+    }
+
+    // Delete room (cascade will handle associated CCTVs)
+    await db.delete(roomsTable)
+      .where(eq(roomsTable.id, id))
+      .execute();
+
+    return {
+      message: 'Room deleted successfully.'
+    };
+  } catch (error) {
+    console.error('Room deletion failed:', error);
+    throw error;
+  }
 }

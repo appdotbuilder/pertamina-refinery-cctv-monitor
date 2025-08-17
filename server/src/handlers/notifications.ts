@@ -1,96 +1,162 @@
+import { db } from '../db';
+import { notificationsTable, usersTable } from '../db/schema';
 import { 
   type Notification, 
   type CreateNotificationInput 
 } from '../schema';
+import { eq, and, desc, count } from 'drizzle-orm';
 
 export async function getNotifications(userId: number): Promise<Notification[]> {
-  // This is a placeholder implementation!
-  // The goal of this handler is to fetch all notifications for a specific user
-  // TODO: Query notifications by user_id from database ordered by date
-  return Promise.resolve([]);
+  try {
+    const results = await db.select()
+      .from(notificationsTable)
+      .where(eq(notificationsTable.user_id, userId))
+      .orderBy(desc(notificationsTable.created_at))
+      .execute();
+
+    return results;
+  } catch (error) {
+    console.error('Failed to fetch notifications:', error);
+    throw error;
+  }
 }
 
 export async function getNotificationById(id: number): Promise<Notification | null> {
-  // This is a placeholder implementation!
-  // The goal of this handler is to fetch a specific notification by ID
-  // TODO: Query notification by ID from database
-  return Promise.resolve(null);
+  try {
+    const results = await db.select()
+      .from(notificationsTable)
+      .where(eq(notificationsTable.id, id))
+      .execute();
+
+    return results.length > 0 ? results[0] : null;
+  } catch (error) {
+    console.error('Failed to fetch notification by ID:', error);
+    throw error;
+  }
 }
 
 export async function createNotification(input: CreateNotificationInput): Promise<Notification> {
-  // This is a placeholder implementation!
-  // The goal of this handler is to create a new notification for a user
-  // TODO: Insert new notification into database
-  return Promise.resolve({
-    id: 1,
-    user_id: input.user_id,
-    type: input.type,
-    title: input.title,
-    content: input.content,
-    is_read: false,
-    created_at: new Date()
-  } as Notification);
+  try {
+    // Verify user exists
+    const userExists = await db.select()
+      .from(usersTable)
+      .where(eq(usersTable.id, input.user_id))
+      .execute();
+
+    if (userExists.length === 0) {
+      throw new Error(`User with ID ${input.user_id} not found`);
+    }
+
+    const results = await db.insert(notificationsTable)
+      .values({
+        user_id: input.user_id,
+        type: input.type,
+        title: input.title,
+        content: input.content,
+        is_read: false
+      })
+      .returning()
+      .execute();
+
+    return results[0];
+  } catch (error) {
+    console.error('Failed to create notification:', error);
+    throw error;
+  }
 }
 
 export async function markNotificationAsRead(id: number): Promise<Notification> {
-  // This is a placeholder implementation!
-  // The goal of this handler is to mark a notification as read
-  // TODO: Update is_read status in database
-  return Promise.resolve({
-    id,
-    user_id: 1,
-    type: 'LOGIN',
-    title: 'Notification Title',
-    content: 'Notification content',
-    is_read: true,
-    created_at: new Date()
-  } as Notification);
+  try {
+    const results = await db.update(notificationsTable)
+      .set({ 
+        is_read: true
+      })
+      .where(eq(notificationsTable.id, id))
+      .returning()
+      .execute();
+
+    if (results.length === 0) {
+      throw new Error(`Notification with ID ${id} not found`);
+    }
+
+    return results[0];
+  } catch (error) {
+    console.error('Failed to mark notification as read:', error);
+    throw error;
+  }
 }
 
 export async function deleteNotification(id: number): Promise<{ message: string }> {
-  // This is a placeholder implementation!
-  // The goal of this handler is to delete a notification
-  // TODO: Delete notification from database
-  return Promise.resolve({
-    message: 'Notification deleted successfully.'
-  });
+  try {
+    const results = await db.delete(notificationsTable)
+      .where(eq(notificationsTable.id, id))
+      .returning()
+      .execute();
+
+    if (results.length === 0) {
+      throw new Error(`Notification with ID ${id} not found`);
+    }
+
+    return {
+      message: 'Notification deleted successfully.'
+    };
+  } catch (error) {
+    console.error('Failed to delete notification:', error);
+    throw error;
+  }
 }
 
 export async function getUnreadNotificationCount(userId: number): Promise<{ count: number }> {
-  // This is a placeholder implementation!
-  // The goal of this handler is to get count of unread notifications
-  // TODO: Count unread notifications for user
-  return Promise.resolve({
-    count: 0
-  });
+  try {
+    const results = await db.select({
+      count: count()
+    })
+      .from(notificationsTable)
+      .where(
+        and(
+          eq(notificationsTable.user_id, userId),
+          eq(notificationsTable.is_read, false)
+        )
+      )
+      .execute();
+
+    return {
+      count: results[0]?.count || 0
+    };
+  } catch (error) {
+    console.error('Failed to get unread notification count:', error);
+    throw error;
+  }
 }
 
 export async function createLoginNotification(userId: number): Promise<Notification> {
-  // This is a placeholder implementation!
-  // The goal of this handler is to create a login notification when user logs in
-  // TODO: Create notification with LOGIN type for user login events
-  return Promise.resolve({
-    id: 1,
-    user_id: userId,
-    type: 'LOGIN',
-    title: 'Login Successful',
-    content: 'You have successfully logged in to the CCTV monitoring system.',
-    is_read: false,
-    created_at: new Date()
-  } as Notification);
+  try {
+    const input: CreateNotificationInput = {
+      user_id: userId,
+      type: 'LOGIN',
+      title: 'Login Successful',
+      content: 'You have successfully logged in to the CCTV monitoring system.'
+    };
+
+    return await createNotification(input);
+  } catch (error) {
+    console.error('Failed to create login notification:', error);
+    throw error;
+  }
 }
 
 export async function createStreamEventNotification(userId: number, cctvName: string, event: string): Promise<Notification> {
-  // This is a placeholder implementation!
-  // The goal of this handler is to create notifications for CCTV stream events
-  // TODO: Create notification with STREAM_EVENT type for CCTV status changes
-  return Promise.resolve({
-    id: 1,
-    user_id: userId,
-    type: 'STREAM_EVENT',
-    title: 'CCTV Stream Event',
-    content: `${cctvName}: ${event}`,
-    is_read: false,
-    created_at: new Date()
-  } as Notification);
+  try {
+    const input: CreateNotificationInput = {
+      user_id: userId,
+      type: 'STREAM_EVENT',
+      title: 'CCTV Stream Event',
+      content: `${cctvName}: ${event}`
+    };
+
+    return await createNotification(input);
+  } catch (error) {
+    console.error('Failed to create stream event notification:', error);
+    throw error;
+  }
 }
